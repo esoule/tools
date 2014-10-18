@@ -1,3 +1,12 @@
+# Backup files
+*~
+*.old
+*.bak
+*.log
+*.org
+*.orig
+*.rej
+
 # Object files
 *.o
 *.ko
