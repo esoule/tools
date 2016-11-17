@@ -15,9 +15,24 @@ PROGINFO="${PROGNAME}"
 PROJECT_HOME="$(cd "$(dirname "$0")" && cd .. && pwd)"
 THIS_SCRIPT_FULLPATH="${PROJECT_HOME}/scripts/${PROGNAME}"
 
+newline=$'\n'
+
 want_usage=""
 
+# for main process
+valid_families_list=""
+valid_variants_list=""
+valid_components_list=""
+
+# for main process
+# TODO convert to multi_str using newlines
+# TODO add support for all-variants and all-components (must replace existing ones properly)
+# TODO must support proper list canonicalization at the end
+variants_list=""
+components_list=""
+# for both main process and subprocesses
 family_str=""
+# for subprocesses
 variant_str=""
 component_str=""
 
@@ -26,10 +41,12 @@ verbose_level=0
 if_verbose_1=": skip"
 # run the whole script verbose
 if_verbose_script=": skip"
+verbose_s_echo=":"
 
 # options to pass to subprocesses
 opt_verbose_sub=""
 opt_logging_sub=""
+opt_zap_sub=""
 opt_family_sub=""
 opt_variant_sub=""
 
@@ -45,11 +62,14 @@ exit_handler()
 		rm -f ${files_to_remove}
 	fi
 
-	echo ""    >&2
 	if ! [ ${rv_ex} = 0 ] ; then
-		echo "ERROR: ${PROGINFO}: exiting with error"    >&2
+		if [ -z "${want_usage}" ] ; then
+			echo ""    >&2
+			echo "ERROR: ${PROGINFO}: exiting with error"    >&2
+		fi
 	else
-		echo "${PROGINFO}: success"    >&2
+		${verbose_s_echo} ""    >&2
+		${verbose_s_echo} "${PROGINFO}: success"    >&2
 	fi
 	return 0
 }
@@ -57,7 +77,6 @@ exit_handler()
 show_usage()
 {
 	cat <<__EOF__
-
 Usage: $0 [-v] [-l] [-z] -a FAMILY -b VARIANT1,... COMPONENT1 ...
 Build all or requested components of the project, for requested family
 and variants
@@ -75,6 +94,16 @@ __EOF__
 	true
 }
 
+sed_item_string()
+{
+	sed -e 's/\s\+//g;'
+}
+
+sed_list_string()
+{
+	sed -e 's/\s\+/ /g; s/^\s\+//; s/\s\+$//;'
+}
+
 parse_verbose_option()
 {
 	verbose_level=$(( verbose_level + 1 ))
@@ -83,6 +112,7 @@ parse_verbose_option()
 	if_verbose_1=""
 	if [ ${verbose_level} -ge 3 ] ; then
 		if_verbose_script=""
+		verbose_s_echo="echo"
 	fi
 
 	${if_verbose_script} set -x
@@ -96,9 +126,15 @@ parse_logging_option()
 	return 0
 }
 
+parse_zap_option()
+{
+	opt_zap_sub="${opt_zap_sub} -z"
+	return 0
+}
+
 parse_one_family_option()
 {
-	family_str="${1:-}"
+	family_str="$( echo -n "${1:-}" | sed_item_string )"
 	opt_family_sub=""
 	if [ -z "${family_str}" ] ; then
 		return 1
@@ -107,14 +143,44 @@ parse_one_family_option()
 	return 0
 }
 
+parse_multiple_variants_option()
+{
+	local addlist="$( echo -n "${1:-}" | sed -e 's/,/ /g;' | sed_list_string )"
+
+	if [ -z "${addlist}" ] ; then
+		return 1
+	fi
+
+	variants_list="${variants_list} ${addlist}"
+
+	return 0
+}
+
 parse_one_variant_option()
 {
-	variant_str="${1:-}"
+	variant_str="$( echo -n "${1:-}" | sed_item_string )"
+
 	opt_variant_sub=""
+
 	if [ -z "${variant_str}" ] ; then
 		return 1
 	fi
+
 	opt_variant_sub=" -b ${variant_str}"
+
+	return 0
+}
+
+parse_one_of_many_components()
+{
+	local additem="$( echo -n "${1:-}" | sed_item_string )"
+
+	if [ -z "${additem}" ] ; then
+		return 1
+	fi
+
+	components_list="${components_list} ${additem}"
+
 	return 0
 }
 
@@ -124,11 +190,183 @@ get_logfile_path()
 	return 0
 }
 
+main_parse_args()
+{
+	## -v -v -v -l -z -a family -b variant1,variant2,... component1 component2 component3
+	if [ $# -lt 1 ] ; then
+		want_usage="Y"
+		return 0
+	fi
+	local ret_val=0
+
+	while getopts ":vlza:b:h" OPTION ; do
+		case "${OPTION}" in
+		v)
+			if ! parse_verbose_option ; then
+				echo "ERROR: ${PROGINFO}: invalid option -v"    >&2
+				ret_val=12
+			fi
+			;;
+		l)
+			if ! parse_logging_option ; then
+				echo "ERROR: ${PROGINFO}: invalid option -l"    >&2
+				ret_val=13
+			fi
+			;;
+		z)
+			if ! parse_zap_option ; then
+				echo "ERROR: ${PROGINFO}: invalid option -z"    >&2
+				ret_val=14
+			fi
+			;;
+		a)
+			if ! parse_one_family_option "${OPTARG}" ; then
+				echo "ERROR: ${PROGINFO}: invalid family option -a ${OPTARG}"    >&2
+				ret_val=15
+			fi
+			;;
+		b)
+			if ! parse_multiple_variants_option "${OPTARG}" ; then
+				echo "ERROR: ${PROGINFO}: invalid variant option -b ${OPTARG}"    >&2
+				ret_val=16
+			fi
+			;;
+		h)
+			want_usage="Y"
+			;;
+		*)
+			echo "ERROR: ${PROGINFO}: illegal option -${OPTARG}"    >&2
+			ret_val=17
+			;;
+		esac
+	done
+
+	if ! [ $ret_val = 0 ] ; then
+		return $ret_val
+	fi
+
+	if [ -n "${want_usage}" ] ; then
+		return 0
+	fi
+
+	shift $(( ${OPTIND} - 1 ))
+
+	if [ $# -lt 1 ] ; then
+		echo "ERROR: ${PROGINFO}: no components to build requested"    >&2
+		return 21
+	fi
+
+	while [ $# -gt 0 ] ; do
+		if ! parse_one_of_many_components "${1:-}" ; then
+			echo "ERROR: ${PROGINFO}: illegal component ${1:-}"    >&2
+			ret_val=22
+		fi
+		shift 1
+	done
+
+	if ! [ $ret_val = 0 ] ; then
+		return $ret_val
+	fi
+
+	## read the environment, if necessary
+	if [ -z "${family_str}" ] && [ -n "${FAMILY:-}" ] ; then
+		family_str="${FAMILY}"
+	fi
+
+	if [ -z "${variants_list}" ] && [ -n "${VARIANT:-}" ] ; then
+		variants_list="${VARIANT}"
+	fi
+
+	# Remove leading and trailing spaces
+	family_str="$( echo -n "${family_str}" | sed_item_string )"
+	variants_list="$( echo -n "${variants_list}" | sed_list_string )"
+	components_list="$( echo -n "${components_list}" | sed_list_string )"
+
+	if [ -z "${variants_list}" ] ; then
+		echo "ERROR: ${PROGINFO}: no variants to build requested"    >&2
+		return 23
+	fi
+
+	if [ -z "${components_list}" ] ; then
+		echo "ERROR: ${PROGINFO}: no components to build requested"    >&2
+		return 24
+	fi
+
+	return 0
+}
+
+item_is_in_list()
+{
+	local item="${1:-}"
+	local list="${2:-}"
+
+	if [ -z "${item}" ] || [ -z "${list}" ] ; then
+		return 1
+	fi
+
+	if ! { echo -n " ${list} " | grep -F -o " ${item} " >/dev/null ; } ; then
+		return 1
+	fi
+
+	return 0
+}
+
+main_args_are_valid()
+{
+	local not_in_list=""
+
+	if [ -z "${family_str}" ] ; then
+		echo "ERROR: ${PROGINFO}: family option not specified"    >&2
+		return 1
+	fi
+
+	if ! item_is_in_list "${family_str}" "${valid_families_list}" ; then
+		echo "ERROR: ${PROGINFO}: family ${family_str} is not in list (${valid_families_list})"    >&2
+		return 1
+	fi
+
+	valid_variants_list="$( get_valid_variants_list_for_family_${family_str} | sed_list_string )"
+	valid_components_list="$( get_valid_components_list_for_family_${family_str} | sed_list_string )"
+
+	not_in_list=""
+	for variant in ${variants_list} ; do
+		if ! item_is_in_list "${variant}" "${valid_variants_list}" ; then
+			echo "ERROR: ${PROGINFO}: variant ${variant} is not in variants list"    >&2
+			not_in_list="Y"
+		fi
+	done
+
+	for component in ${components_list} ; do
+		if ! item_is_in_list "${component}" "${valid_components_list}" ; then
+			echo "ERROR: ${PROGINFO}: component ${component} is not in components list"    >&2
+			not_in_list="Y"
+		fi
+	done
+
+	if [ -n "${not_in_list}" ] ; then
+		echo "INFO: ${PROGINFO}: valid variant list is ${valid_variants_list}"    >&2
+		echo "INFO: ${PROGINFO}: valid component list is ${valid_components_list}"    >&2
+		return 1
+	fi
+
+	## component list must be ordered like ${valid_components_list}
+	local new_comp_list=""
+	for component in ${valid_components_list} ; do
+		if item_is_in_list "${component}" "${components_list}" ; then
+			new_comp_list="${new_comp_list} ${component}"
+		fi
+	done
+	components_list="$( echo -n "${new_comp_list}" | sed_list_string )"
+	echo "INFO: ${PROGINFO}: component list is ${components_list}"    >&2
+
+	return 0
+}
+
 sub_10_20_parse_args()
 {
-	## -v -v -l -a family -b variant component
+	## -v -v -v -l -a family -b variant component
 	if [ $# -lt 1 ] ; then
-		return 11
+		return 31
 	fi
 	local ret_val=0
 
@@ -136,26 +374,26 @@ sub_10_20_parse_args()
 		case "${OPTION}" in
 		v)
 			if ! parse_verbose_option ; then
-				ret_val=12
+				ret_val=32
 			fi
 			;;
 		l)
 			if ! parse_logging_option ; then
-				ret_val=13
+				ret_val=33
 			fi
 			;;
 		a)
 			if ! parse_one_family_option "${OPTARG}" ; then
-				ret_val=14
+				ret_val=34
 			fi
 			;;
 		b)
 			if ! parse_one_variant_option "${OPTARG}" ; then
-				ret_val=15
+				ret_val=35
 			fi
 			;;
 		*)
-			ret_val=16
+			ret_val=36
 			;;
 		esac
 	done
@@ -168,15 +406,15 @@ sub_10_20_parse_args()
 
 	component_str="${1:-}"
 	if [ -z "${family_str}" ] ; then
-		return 17
+		return 37
 	fi
 
 	if [ -z "${variant_str}" ] ; then
-		return 18
+		return 38
 	fi
 
 	if [ -z "${component_str}" ] ; then
-		return 19
+		return 39
 	fi
 
 	return 0
@@ -186,7 +424,8 @@ sub_10_process_call_sub_20()
 {
 	${if_verbose_1} set -x
 
-	${THIS_SCRIPT_FULLPATH} --run sub_20 ${opt_verbose_sub} ${opt_logging_sub} ${opt_family_sub} ${opt_variant_sub} ${component_str}
+	${THIS_SCRIPT_FULLPATH} --run sub_20 ${opt_verbose_sub} ${opt_logging_sub} \
+		${opt_family_sub} ${opt_variant_sub} ${component_str}
 
 	return $?
 }
@@ -194,11 +433,13 @@ sub_10_process_call_sub_20()
 sub_10_process()
 {
 	if ! sub_10_20_parse_args "$@" ; then
-		echo "ERROR: ${PROGINFO}: invalid arguments"    >&2
 		exit 1
 	fi
 
 	${if_verbose_script} set -x
+
+	unset FAMILY
+	unset VARIANT
 
 	## tmp_file contains return value of command
 	local tmp_file="$( mktemp "/tmp/tmp.build.sh.XXXXXXXXXX" )"
@@ -244,12 +485,58 @@ sub_20_process()
 
 	${if_verbose_1} set -x
 
+	unset FAMILY
+	unset VARIANT
+
+	echo "${PROGINFO}: build_sh_family_${family_str}_component_${component_str} VARIANT ${variant_str}"    >&2
 	build_sh_family_${family_str}_component_${component_str}
 
 	return $?
 }
 
-build_sh_family_AA_component_component1()
+get_valid_families_list()
+{
+	echo -n "FAA FBB FCC"
+	return 0
+}
+
+get_valid_variants_list_for_family_FAA()
+{
+	echo -n "VMM VNN VOO"
+	return 0
+}
+
+get_valid_variants_list_for_family_FBB()
+{
+	echo -n "VPP VQQ VRR"
+	return 0
+}
+
+get_valid_variants_list_for_family_FCC()
+{
+	echo -n "VSS VTT VUU"
+	return 0
+}
+
+get_valid_components_list_for_family_FAA()
+{
+	echo -n "component11 component12 component13 component14 component15"
+	return 0
+}
+
+get_valid_components_list_for_family_FBB()
+{
+	echo -n "component21 component22 component23 component24 component25"
+	return 0
+}
+
+get_valid_components_list_for_family_FCC()
+{
+	echo -n "component31 component32 component33 component34 component35"
+	return 0
+}
+
+build_sh_family_FAA_component_component11()
 {
 	true 1
 	true 2
@@ -263,7 +550,7 @@ build_sh_family_AA_component_component1()
 	return 0
 }
 
-build_sh_family_AA_component_component2()
+build_sh_family_FAA_component_component12()
 {
 	true 1
 	true 2
@@ -277,7 +564,7 @@ build_sh_family_AA_component_component2()
 	return 0
 }
 
-build_sh_family_BB_component_component3()
+build_sh_family_FBB_component_component21()
 {
 	true 1
 	true 2
@@ -291,7 +578,7 @@ build_sh_family_BB_component_component3()
 	return 0
 }
 
-build_sh_family_BB_component_component4()
+build_sh_family_FBB_component_component22()
 {
 	true 1
 	true 2
@@ -307,7 +594,26 @@ build_sh_family_BB_component_component4()
 
 main_process()
 {
-	true main_process
+	valid_families_list="$( get_valid_families_list )"
+
+	if ! main_parse_args "$@" ; then
+		exit 1
+	fi
+
+	if ! main_args_are_valid ; then
+		exit 1
+	fi
+
+	unset FAMILY
+	unset VARIANT
+
+	if [ -n "${want_usage}" ] ; then
+		show_usage    >&2
+		exit 1
+	fi
+
+	echo "ERROR: ${PROGINFO}: SCRIPT INCOMPLETE. FORCING FAILURE."    >&2
+
 	return 0
 }
 
