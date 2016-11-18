@@ -17,53 +17,53 @@ THIS_SCRIPT_FULLPATH="${PROJECT_HOME}/scripts/${PROGNAME}"
 
 newline=$'\n'
 
-want_usage=""
+WANT_USAGE=""
 
 # for main process
-valid_families_list=""
-valid_variants_list=""
-valid_components_list=""
+VALID_FAMILIES_LIST=""
+VALID_VARIANTS_LIST=""
+VALID_COMPONENTS_LIST=""
 
 # for main process
 # TODO convert to multi_str using newlines
 # TODO add support for all-variants and all-components (must replace existing ones properly)
 # TODO must support proper list canonicalization at the end
-variants_list=""
-components_list=""
+VARIANTS_LIST=""
+COMPONENTS_LIST=""
 # for both main process and subprocesses
-family_str=""
+FAMILY_STR=""
 # for subprocesses
-variant_str=""
-component_str=""
+VARIANT_STR=""
+COMPONENT_STR=""
 
-verbose_level=0
+VERBOSE_LEVEL=0
 # run the component command verbose
-if_verbose_1=": skip"
+set_x_verbose_1="set +x"
 # run the whole script verbose
-if_verbose_script=": skip"
+set_x_verbose_script="set +x"
 verbose_s_echo=":"
 
 # options to pass to subprocesses
-opt_verbose_sub=""
-opt_logging_sub=""
-opt_zap_sub=""
-opt_family_sub=""
-opt_variant_sub=""
+SUB_OPT_VERBOSE=""
+SUB_OPT_LOGGING=""
+SUB_OPT_ZAP=""
+SUB_OPT_FAMILY=""
+SUB_OPT_VARIANT=""
 
 # exit handler globals
-files_to_remove=""
+FILES_TO_REMOVE=""
 
 exit_handler()
 {
 	set +x
 	local rv_ex="$1"
 
-	if [ -n "${files_to_remove}" ] ; then
-		rm -f ${files_to_remove}
+	if [ -n "${FILES_TO_REMOVE}" ] ; then
+		rm -f ${FILES_TO_REMOVE}
 	fi
 
 	if ! [ ${rv_ex} = 0 ] ; then
-		if [ -z "${want_usage}" ] ; then
+		if [ -z "${WANT_USAGE}" ] ; then
 			echo ""    >&2
 			echo "ERROR: ${PROGINFO}: exiting with error"    >&2
 		fi
@@ -106,40 +106,40 @@ sed_list_string()
 
 parse_verbose_option()
 {
-	verbose_level=$(( verbose_level + 1 ))
-	opt_verbose_sub="${opt_verbose_sub} -v"
+	VERBOSE_LEVEL=$(( VERBOSE_LEVEL + 1 ))
+	SUB_OPT_VERBOSE="${SUB_OPT_VERBOSE} -v"
 
-	if_verbose_1=""
-	if [ ${verbose_level} -ge 3 ] ; then
-		if_verbose_script=""
+	set_x_verbose_1="set -x"
+	if [ ${VERBOSE_LEVEL} -ge 3 ] ; then
+		set_x_verbose_script="set -x"
 		verbose_s_echo="echo"
 	fi
 
-	${if_verbose_script} set -x
+	${set_x_verbose_script}
 
 	return 0
 }
 
 parse_logging_option()
 {
-	opt_logging_sub="${opt_logging_sub} -l"
+	SUB_OPT_LOGGING="${SUB_OPT_LOGGING} -l"
 	return 0
 }
 
 parse_zap_option()
 {
-	opt_zap_sub="${opt_zap_sub} -z"
+	SUB_OPT_ZAP="${SUB_OPT_ZAP} -z"
 	return 0
 }
 
 parse_one_family_option()
 {
-	family_str="$( echo -n "${1:-}" | sed_item_string )"
-	opt_family_sub=""
-	if [ -z "${family_str}" ] ; then
+	FAMILY_STR="$( echo -n "${1:-}" | sed_item_string )"
+	SUB_OPT_FAMILY=""
+	if [ -z "${FAMILY_STR}" ] ; then
 		return 1
 	fi
-	opt_family_sub=" -a ${family_str}"
+	SUB_OPT_FAMILY=" -a ${FAMILY_STR}"
 	return 0
 }
 
@@ -151,22 +151,22 @@ parse_multiple_variants_option()
 		return 1
 	fi
 
-	variants_list="${variants_list} ${addlist}"
+	VARIANTS_LIST="${VARIANTS_LIST} ${addlist}"
 
 	return 0
 }
 
 parse_one_variant_option()
 {
-	variant_str="$( echo -n "${1:-}" | sed_item_string )"
+	VARIANT_STR="$( echo -n "${1:-}" | sed_item_string )"
 
-	opt_variant_sub=""
+	SUB_OPT_VARIANT=""
 
-	if [ -z "${variant_str}" ] ; then
+	if [ -z "${VARIANT_STR}" ] ; then
 		return 1
 	fi
 
-	opt_variant_sub=" -b ${variant_str}"
+	SUB_OPT_VARIANT=" -b ${VARIANT_STR}"
 
 	return 0
 }
@@ -179,14 +179,14 @@ parse_one_of_many_components()
 		return 1
 	fi
 
-	components_list="${components_list} ${additem}"
+	COMPONENTS_LIST="${COMPONENTS_LIST} ${additem}"
 
 	return 0
 }
 
 get_logfile_path()
 {
-	echo -n "${PROJECT_HOME}/tmp.logs/${family_str}-${variant_str}-${component_str}.log"
+	echo -n "${PROJECT_HOME}/tmp.logs/${FAMILY_STR}-${VARIANT_STR}-${COMPONENT_STR}.log"
 	return 0
 }
 
@@ -194,7 +194,7 @@ main_parse_args()
 {
 	## -v -v -v -l -z -a family -b variant1,variant2,... component1 component2 component3
 	if [ $# -lt 1 ] ; then
-		want_usage="Y"
+		WANT_USAGE="Y"
 		return 0
 	fi
 	local ret_val=0
@@ -232,7 +232,7 @@ main_parse_args()
 			fi
 			;;
 		h)
-			want_usage="Y"
+			WANT_USAGE="Y"
 			;;
 		*)
 			echo "ERROR: ${PROGINFO}: illegal option -${OPTARG}"    >&2
@@ -245,7 +245,7 @@ main_parse_args()
 		return $ret_val
 	fi
 
-	if [ -n "${want_usage}" ] ; then
+	if [ -n "${WANT_USAGE}" ] ; then
 		return 0
 	fi
 
@@ -269,25 +269,25 @@ main_parse_args()
 	fi
 
 	## read the environment, if necessary
-	if [ -z "${family_str}" ] && [ -n "${FAMILY:-}" ] ; then
-		family_str="${FAMILY}"
+	if [ -z "${FAMILY_STR}" ] && [ -n "${FAMILY:-}" ] ; then
+		FAMILY_STR="${FAMILY}"
 	fi
 
-	if [ -z "${variants_list}" ] && [ -n "${VARIANT:-}" ] ; then
-		variants_list="${VARIANT}"
+	if [ -z "${VARIANTS_LIST}" ] && [ -n "${VARIANT:-}" ] ; then
+		VARIANTS_LIST="${VARIANT}"
 	fi
 
 	# Remove leading and trailing spaces
-	family_str="$( echo -n "${family_str}" | sed_item_string )"
-	variants_list="$( echo -n "${variants_list}" | sed_list_string )"
-	components_list="$( echo -n "${components_list}" | sed_list_string )"
+	FAMILY_STR="$( echo -n "${FAMILY_STR}" | sed_item_string )"
+	VARIANTS_LIST="$( echo -n "${VARIANTS_LIST}" | sed_list_string )"
+	COMPONENTS_LIST="$( echo -n "${COMPONENTS_LIST}" | sed_list_string )"
 
-	if [ -z "${variants_list}" ] ; then
+	if [ -z "${VARIANTS_LIST}" ] ; then
 		echo "ERROR: ${PROGINFO}: no variants to build requested"    >&2
 		return 23
 	fi
 
-	if [ -z "${components_list}" ] ; then
+	if [ -z "${COMPONENTS_LIST}" ] ; then
 		echo "ERROR: ${PROGINFO}: no components to build requested"    >&2
 		return 24
 	fi
@@ -315,49 +315,49 @@ main_args_are_valid()
 {
 	local not_in_list=""
 
-	if [ -z "${family_str}" ] ; then
+	if [ -z "${FAMILY_STR}" ] ; then
 		echo "ERROR: ${PROGINFO}: family option not specified"    >&2
 		return 1
 	fi
 
-	if ! item_is_in_list "${family_str}" "${valid_families_list}" ; then
-		echo "ERROR: ${PROGINFO}: family ${family_str} is not in list (${valid_families_list})"    >&2
+	if ! item_is_in_list "${FAMILY_STR}" "${VALID_FAMILIES_LIST}" ; then
+		echo "ERROR: ${PROGINFO}: family ${FAMILY_STR} is not in list (${VALID_FAMILIES_LIST})"    >&2
 		return 1
 	fi
 
-	valid_variants_list="$( get_valid_variants_list_for_family_${family_str} | sed_list_string )"
-	valid_components_list="$( get_valid_components_list_for_family_${family_str} | sed_list_string )"
+	VALID_VARIANTS_LIST="$( get_valid_variants_list_for_family_${FAMILY_STR} | sed_list_string )"
+	VALID_COMPONENTS_LIST="$( get_valid_components_list_for_family_${FAMILY_STR} | sed_list_string )"
 
 	not_in_list=""
-	for variant in ${variants_list} ; do
-		if ! item_is_in_list "${variant}" "${valid_variants_list}" ; then
+	for variant in ${VARIANTS_LIST} ; do
+		if ! item_is_in_list "${variant}" "${VALID_VARIANTS_LIST}" ; then
 			echo "ERROR: ${PROGINFO}: variant ${variant} is not in variants list"    >&2
 			not_in_list="Y"
 		fi
 	done
 
-	for component in ${components_list} ; do
-		if ! item_is_in_list "${component}" "${valid_components_list}" ; then
+	for component in ${COMPONENTS_LIST} ; do
+		if ! item_is_in_list "${component}" "${VALID_COMPONENTS_LIST}" ; then
 			echo "ERROR: ${PROGINFO}: component ${component} is not in components list"    >&2
 			not_in_list="Y"
 		fi
 	done
 
 	if [ -n "${not_in_list}" ] ; then
-		echo "INFO: ${PROGINFO}: valid variant list is ${valid_variants_list}"    >&2
-		echo "INFO: ${PROGINFO}: valid component list is ${valid_components_list}"    >&2
+		echo "INFO: ${PROGINFO}: valid variant list is ${VALID_VARIANTS_LIST}"    >&2
+		echo "INFO: ${PROGINFO}: valid component list is ${VALID_COMPONENTS_LIST}"    >&2
 		return 1
 	fi
 
-	## component list must be ordered like ${valid_components_list}
+	## component list must be ordered like ${VALID_COMPONENTS_LIST}
 	local new_comp_list=""
-	for component in ${valid_components_list} ; do
-		if item_is_in_list "${component}" "${components_list}" ; then
+	for component in ${VALID_COMPONENTS_LIST} ; do
+		if item_is_in_list "${component}" "${COMPONENTS_LIST}" ; then
 			new_comp_list="${new_comp_list} ${component}"
 		fi
 	done
-	components_list="$( echo -n "${new_comp_list}" | sed_list_string )"
-	echo "INFO: ${PROGINFO}: component list is ${components_list}"    >&2
+	COMPONENTS_LIST="$( echo -n "${new_comp_list}" | sed_list_string )"
+	echo "INFO: ${PROGINFO}: component list is ${COMPONENTS_LIST}"    >&2
 
 	return 0
 }
@@ -404,16 +404,16 @@ sub_10_20_parse_args()
 
 	shift $(( ${OPTIND} - 1 ))
 
-	component_str="${1:-}"
-	if [ -z "${family_str}" ] ; then
+	COMPONENT_STR="${1:-}"
+	if [ -z "${FAMILY_STR}" ] ; then
 		return 37
 	fi
 
-	if [ -z "${variant_str}" ] ; then
+	if [ -z "${VARIANT_STR}" ] ; then
 		return 38
 	fi
 
-	if [ -z "${component_str}" ] ; then
+	if [ -z "${COMPONENT_STR}" ] ; then
 		return 39
 	fi
 
@@ -422,10 +422,10 @@ sub_10_20_parse_args()
 
 sub_10_process_call_sub_20()
 {
-	${if_verbose_1} set -x
+	${set_x_verbose_1}
 
-	${THIS_SCRIPT_FULLPATH} --run sub_20 ${opt_verbose_sub} ${opt_logging_sub} \
-		${opt_family_sub} ${opt_variant_sub} ${component_str}
+	${THIS_SCRIPT_FULLPATH} --run sub_20 ${SUB_OPT_VERBOSE} ${SUB_OPT_LOGGING} \
+		${SUB_OPT_FAMILY} ${SUB_OPT_VARIANT} ${COMPONENT_STR}
 
 	return $?
 }
@@ -436,7 +436,7 @@ sub_10_process()
 		exit 1
 	fi
 
-	${if_verbose_script} set -x
+	${set_x_verbose_script}
 
 	unset FAMILY
 	unset VARIANT
@@ -446,10 +446,10 @@ sub_10_process()
 	if [ -z "${tmp_file}" ] ; then
 		return 111
 	fi
-	files_to_remove="${files_to_remove} ${tmp_file}"
+	FILES_TO_REMOVE="${FILES_TO_REMOVE} ${tmp_file}"
 
 	local log_file_path=""
-	if [ -n "${opt_logging_sub}" ] ; then
+	if [ -n "${SUB_OPT_LOGGING}" ] ; then
 		local log_file_path="$( get_logfile_path )"
 		local log_parent_dir="$( dirname "${log_file_path}" )"
 		mkdir -p "${log_parent_dir}"
@@ -458,7 +458,7 @@ sub_10_process()
 
 	echo -n 112 >"${tmp_file}"
 	set +e
-	if [ -n "${opt_logging_sub}" ] ; then
+	if [ -n "${SUB_OPT_LOGGING}" ] ; then
 		(
 			sub_10_process_call_sub_20
 			echo -n $? >"${tmp_file}"
@@ -483,13 +483,13 @@ sub_20_process()
 		exit 1
 	fi
 
-	${if_verbose_1} set -x
+	${set_x_verbose_1}
 
 	unset FAMILY
 	unset VARIANT
 
-	echo "${PROGINFO}: build_sh_family_${family_str}_component_${component_str} VARIANT ${variant_str}"    >&2
-	build_sh_family_${family_str}_component_${component_str}
+	echo "${PROGINFO}: build_sh_family_${FAMILY_STR}_component_${COMPONENT_STR} VARIANT ${VARIANT_STR}"    >&2
+	build_sh_family_${FAMILY_STR}_component_${COMPONENT_STR}
 
 	return $?
 }
@@ -540,7 +540,7 @@ build_sh_family_FAA_component_component11()
 {
 	true 1
 	true 2
-	if [ "${DEBUG_FORCE_FAIL:-}" = "AA_${variant_str}_component1" ] ; then
+	if [ "${DEBUG_FORCE_FAIL:-}" = "AA_${VARIANT_STR}_component1" ] ; then
 		echo "ERROR: ${PROGINFO}: forcing a failure"    >&2
 		local vvvv="FAILED ALREADY"
 		false
@@ -554,7 +554,7 @@ build_sh_family_FAA_component_component12()
 {
 	true 1
 	true 2
-	if [ "${DEBUG_FORCE_FAIL:-}" = "AA_${variant_str}_component2" ] ; then
+	if [ "${DEBUG_FORCE_FAIL:-}" = "AA_${VARIANT_STR}_component2" ] ; then
 		echo "ERROR: ${PROGINFO}: forcing a failure"    >&2
 		local vvvv="FAILED ALREADY"
 		false
@@ -568,7 +568,7 @@ build_sh_family_FBB_component_component21()
 {
 	true 1
 	true 2
-	if [ "${DEBUG_FORCE_FAIL:-}" = "BB_${variant_str}_component3" ] ; then
+	if [ "${DEBUG_FORCE_FAIL:-}" = "BB_${VARIANT_STR}_component3" ] ; then
 		echo "ERROR: ${PROGINFO}: forcing a failure"    >&2
 		local vvvv="FAILED ALREADY"
 		false
@@ -582,7 +582,7 @@ build_sh_family_FBB_component_component22()
 {
 	true 1
 	true 2
-	if [ "${DEBUG_FORCE_FAIL:-}" = "BB_${variant_str}_component4" ] ; then
+	if [ "${DEBUG_FORCE_FAIL:-}" = "BB_${VARIANT_STR}_component4" ] ; then
 		echo "ERROR: ${PROGINFO}: forcing a failure"    >&2
 		local vvvv="FAILED ALREADY"
 		false
@@ -594,7 +594,7 @@ build_sh_family_FBB_component_component22()
 
 main_process()
 {
-	valid_families_list="$( get_valid_families_list )"
+	VALID_FAMILIES_LIST="$( get_valid_families_list )"
 
 	if ! main_parse_args "$@" ; then
 		exit 1
@@ -607,7 +607,7 @@ main_process()
 	unset FAMILY
 	unset VARIANT
 
-	if [ -n "${want_usage}" ] ; then
+	if [ -n "${WANT_USAGE}" ] ; then
 		show_usage    >&2
 		exit 1
 	fi
