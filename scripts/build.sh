@@ -15,7 +15,7 @@ PROGINFO="${PROGNAME}"
 PROJECT_HOME="$(cd "$(dirname "$0")" && cd .. && pwd)"
 THIS_SCRIPT_FULLPATH="${PROJECT_HOME}/scripts/${PROGNAME}"
 
-newline=$'\n'
+__nl=$'\n'
 
 WANT_USAGE=""
 
@@ -28,13 +28,15 @@ VALID_COMPONENTS_LIST=""
 # TODO convert to multi_str using newlines
 # TODO add support for all-variants and all-components (must replace existing ones properly)
 # TODO must support proper list canonicalization at the end
-VARIANTS_LIST=""
-COMPONENTS_LIST=""
+VARIANTS_MULTI_STR=""
+HAVE_ALL_VARIANTS=""
+COMPONENTS_MULTI_STR=""
+HAVE_ALL_COMPONENTS=""
 # for both main process and subprocesses
-FAMILY_STR=""
+FAMILY_STR="UNKNOWNFAMILY"
 # for subprocesses
-VARIANT_STR=""
-COMPONENT_STR=""
+VARIANT_STR="UNKNOWNVARIANT"
+COMPONENT_STR="UNKNOWNCOMPONENT"
 
 VERBOSE_LEVEL=0
 # run the component command verbose
@@ -94,6 +96,16 @@ __EOF__
 	true
 }
 
+sed_filter_one_item()
+{
+	sed -e 's/\n\+//g; s/\s\+//g;'
+}
+
+sed_comma_list_to_space_sep_list()
+{
+	sed -e 's/,/ /g; s/\n\+/ /g; s/\s\+/ /g; s/^\s\+//; s/\s\+$//;'
+}
+
 sed_item_string()
 {
 	sed -e 's/\s\+//g;'
@@ -102,6 +114,25 @@ sed_item_string()
 sed_list_string()
 {
 	sed -e 's/\s\+/ /g; s/^\s\+//; s/\s\+$//;'
+}
+
+debug_show_main_parse_result()
+{
+	cat <<__EOF__
+PARSE_RESULT
+	FAMILY_STR='${FAMILY_STR}'
+	HAVE_ALL_VARIANTS='${HAVE_ALL_VARIANTS}'
+	VARIANTS_MULTI_STR='${VARIANTS_MULTI_STR}'
+	HAVE_ALL_COMPONENTS='${HAVE_ALL_COMPONENTS}'
+	COMPONENTS_MULTI_STR='${COMPONENTS_MULTI_STR}'
+	VERBOSE_LEVEL='${VERBOSE_LEVEL}'
+	SUB_OPT_VERBOSE='${SUB_OPT_VERBOSE}'
+	SUB_OPT_LOGGING='${SUB_OPT_LOGGING}'
+	SUB_OPT_ZAP='${SUB_OPT_ZAP}'
+	SUB_OPT_FAMILY='${SUB_OPT_FAMILY}'
+
+__EOF__
+	true
 }
 
 parse_verbose_option()
@@ -134,52 +165,58 @@ parse_zap_option()
 
 parse_one_family_option()
 {
-	FAMILY_STR="$( echo -n "${1:-}" | sed_item_string )"
-	SUB_OPT_FAMILY=""
-	if [ -z "${FAMILY_STR}" ] ; then
-		return 1
-	fi
-	SUB_OPT_FAMILY=" -a ${FAMILY_STR}"
-	return 0
-}
-
-parse_multiple_variants_option()
-{
-	local addlist="$( echo -n "${1:-}" | sed -e 's/,/ /g;' | sed_list_string )"
-
-	if [ -z "${addlist}" ] ; then
-		return 1
-	fi
-
-	VARIANTS_LIST="${VARIANTS_LIST} ${addlist}"
-
-	return 0
-}
-
-parse_one_variant_option()
-{
-	VARIANT_STR="$( echo -n "${1:-}" | sed_item_string )"
-
-	SUB_OPT_VARIANT=""
-
-	if [ -z "${VARIANT_STR}" ] ; then
-		return 1
-	fi
-
-	SUB_OPT_VARIANT=" -b ${VARIANT_STR}"
-
-	return 0
-}
-
-parse_one_of_many_components()
-{
-	local additem="$( echo -n "${1:-}" | sed_item_string )"
+	local additem="$( echo -n "${1:-}" | sed_filter_one_item )"
 
 	if [ -z "${additem}" ] ; then
 		return 1
 	fi
 
-	COMPONENTS_LIST="${COMPONENTS_LIST} ${additem}"
+	FAMILY_STR="${additem}"
+	SUB_OPT_FAMILY=" -a ${FAMILY_STR}"
+
+	return 0
+}
+
+parse_multiple_variants_option()
+{
+	local addlist="$( echo -n "${1:-}" | sed_comma_list_to_space_sep_list )"
+
+	for additem in ${addlist} ; do
+		if [ -z "${additem}" ] ; then
+			continue
+		fi
+		if [ "${additem}" = "all-variants" ] ; then
+			HAVE_ALL_VARIANTS="y"
+		else
+			VARIANTS_MULTI_STR="${VARIANTS_MULTI_STR}${additem}${__nl}"
+		fi
+	done
+
+	return 0
+}
+
+parse_components_params()
+{
+	local have_empty_item=""
+
+	while [ $# -gt 0 ] ; do
+		local additem="$( echo -n "${1:-}" | sed_filter_one_item )"
+		shift 1
+		if [ -z "${additem}" ] ; then
+			echo "ERROR: ${PROGINFO}: invalid component '${additem}'"    >&2
+			have_empty_item="y"
+			continue
+		fi
+		if [ "${additem}" = "all-components" ] ; then
+			HAVE_ALL_COMPONENTS="y"
+		else
+			COMPONENTS_MULTI_STR="${COMPONENTS_MULTI_STR}${additem}${__nl}"
+		fi
+	done
+
+	if [ -n "${have_empty_item}" ] ; then
+		return 1
+	fi
 
 	return 0
 }
@@ -194,7 +231,107 @@ main_parse_args()
 {
 	## -v -v -v -l -z -a family -b variant1,variant2,... component1 component2 component3
 	if [ $# -lt 1 ] ; then
-		WANT_USAGE="Y"
+		WANT_USAGE="y"
+		return 0
+	fi
+
+	local ret_val=0
+
+	while getopts ":vlza:b:h" OPTION ; do
+		case "${OPTION}" in
+		v)
+			if ! parse_verbose_option ; then
+				echo "ERROR: ${PROGINFO}: invalid option -v"    >&2
+				ret_val=71
+			fi
+			;;
+		l)
+			if ! parse_logging_option ; then
+				echo "ERROR: ${PROGINFO}: invalid option -l"    >&2
+				ret_val=72
+			fi
+			;;
+		z)
+			if ! parse_zap_option ; then
+				echo "ERROR: ${PROGINFO}: invalid option -z"    >&2
+				ret_val=73
+			fi
+			;;
+		a)
+			if ! parse_one_family_option "${OPTARG}" ; then
+				echo "ERROR: ${PROGINFO}: invalid family option -a '${OPTARG}'"    >&2
+				ret_val=74
+			fi
+			;;
+		b)
+			if ! parse_multiple_variants_option "${OPTARG}" ; then
+				echo "ERROR: ${PROGINFO}: invalid variant option -b '${OPTARG}'"    >&2
+				ret_val=75
+			fi
+			;;
+		h)
+			WANT_USAGE="y"
+			;;
+		*)
+			echo "ERROR: ${PROGINFO}: illegal option -${OPTARG}"    >&2
+			ret_val=79
+			;;
+		esac
+	done
+
+	shift $(( ${OPTIND} - 1 ))
+
+	if ! parse_components_params "$@" ; then
+		ret_val=78
+	fi
+
+	if [ -n "${WANT_USAGE}" ] ; then
+		return 0
+	fi
+
+	if ! [ $ret_val = 0 ] ; then
+		return $ret_val
+	fi
+
+	return 0
+}
+
+main_parse_env()
+{
+	local additem=
+	local ret_val=0
+
+	if [ "${FAMILY_STR}" = "UNKNOWNFAMILY" ] ; then
+		additem="$( echo -n "${FAMILY:-}" | sed_filter_one_item )"
+		if [ -n "${additem}" ] ; then
+			if ! parse_one_family_option "${additem}" ; then
+				echo "ERROR: ${PROGINFO}: invalid FAMILY='${FAMILY:-}' value"    >&2
+				ret_val=74
+			fi
+		fi
+	fi
+
+	if [ -z "${VARIANTS_MULTI_STR}" ] ; then
+		additem="$( echo -n "${VARIANT:-}" | sed_filter_one_item )"
+		if [ -n "${additem}" ] ; then
+			VARIANTS_MULTI_STR="${VARIANTS_MULTI_STR}${additem}${__nl}"
+		fi
+	fi
+
+	debug_show_main_parse_result    >&2
+
+	if ! [ $ret_val = 0 ] ; then
+		return $ret_val
+	fi
+
+	return 0
+}
+
+main_parse_args___000()
+{
+	## -v -v -v -l -z -a family -b variant1,variant2,... component1 component2 component3
+	if [ $# -lt 1 ] ; then
+		WANT_USAGE="y"
 		return 0
 	fi
 	local ret_val=0
@@ -232,7 +369,7 @@ main_parse_args()
 			fi
 			;;
 		h)
-			WANT_USAGE="Y"
+			WANT_USAGE="y"
 			;;
 		*)
 			echo "ERROR: ${PROGINFO}: illegal option -${OPTARG}"    >&2
@@ -274,6 +411,7 @@ main_parse_args()
 	fi
 
 	if [ -z "${VARIANTS_LIST}" ] && [ -n "${VARIANT:-}" ] ; then
+		VARIANT="$( echo -n "${VARIANT}" | sed -e 's/\s\+//g;' )"
 		VARIANTS_LIST="${VARIANT}"
 	fi
 
@@ -311,7 +449,7 @@ item_is_in_list()
 	return 0
 }
 
-main_args_are_valid()
+main_args_are_valid_00000()
 {
 	local not_in_list=""
 
@@ -332,14 +470,14 @@ main_args_are_valid()
 	for variant in ${VARIANTS_LIST} ; do
 		if ! item_is_in_list "${variant}" "${VALID_VARIANTS_LIST}" ; then
 			echo "ERROR: ${PROGINFO}: variant ${variant} is not in variants list"    >&2
-			not_in_list="Y"
+			not_in_list="y"
 		fi
 	done
 
 	for component in ${COMPONENTS_LIST} ; do
 		if ! item_is_in_list "${component}" "${VALID_COMPONENTS_LIST}" ; then
 			echo "ERROR: ${PROGINFO}: component ${component} is not in components list"    >&2
-			not_in_list="Y"
+			not_in_list="y"
 		fi
 	done
 
@@ -600,9 +738,13 @@ main_process()
 		exit 1
 	fi
 
-	if ! main_args_are_valid ; then
+	if ! main_parse_env "$@" ; then
 		exit 1
 	fi
+
+# 	if ! main_args_are_valid ; then
+# 		exit 1
+# 	fi
 
 	unset FAMILY
 	unset VARIANT
