@@ -32,16 +32,17 @@ do_main()
 	fi
 	FILES_TO_REMOVE="${FILES_TO_REMOVE} ${tmp_file}"
 	touch ${tmp_file}
+	sleep 1
 	while true ; do
 		echo "${run_count}" >&2
 		run_count=$(( run_count + 1))
 		sleep 5
-		local count_newer="$( find scripts -type f -newer ${tmp_file} | wc -l )"
+		local count_newer="$( find scripts ! -type d -newer ${tmp_file} | wc -l )"
 		if [ ${count_newer} -gt 0 ] ; then
+			touch ${tmp_file}
 			echo Running ${prog} "$@" >&2
 			${prog} "$@"
 		fi
-		touch ${tmp_file}
 	done
 	true
 }

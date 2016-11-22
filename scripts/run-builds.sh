@@ -7,7 +7,7 @@ set -x
 
 
 ./scripts/build.sh -h
-: _____________________________________ expect help screen
+: _____________________________________ expect illegal option
 
 
 ./scripts/build.sh -q
@@ -22,5 +22,14 @@ FAMILY=ZZZENV VARIANT=QQQENV ./scripts/build.sh -v  -l -z -a "FBB" -a " FAA " -b
 
 FAMILY='  ZZZ ENV  ' VARIANT='  QQQ ENV  ' ./scripts/build.sh -v  -l -z   component13 'all-components' " component12 " component11
 : ________________________________ expect environment usage
+
+./scripts/build.sh -v
+: _____________________________________ expect missing options
+
+./scripts/build.sh -a "FCC" -b all-variants component35 component34 component33 component32
+: _____________________________________ expect missing options
+
+DEBUG_FORCE_FAIL=FCC_VTT_component33 ./scripts/build.sh -v -l -a "FCC" -b all-variants component35 component34 component33 component32
+: _____________________________________ expect missing options
 
 : ____________________________________________________________
