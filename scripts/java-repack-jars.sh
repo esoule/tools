@@ -14,8 +14,8 @@ TIMESTAMP_EPOCH="1000684800"
 DO_CLAMP_TS=""
 DO_REPACK=""
 
-ZIP=${ZIP:-/usr/bin/zip}
-UNZIP=${UNZIP:-/usr/bin/unzip}
+ZIP_PROGRAM=${ZIP_PROGRAM:-/usr/bin/zip}
+UNZIP_PROGRAM=${UNZIP_PROGRAM:-/usr/bin/unzip}
 
 show_usage()
 {
@@ -100,12 +100,12 @@ process_jars_in_dirs()
 {
 	local __opt_nd=""
 
-	if ! [ -x "${ZIP}" ] ; then
-		echo "ERROR: ${PROGNAME}: zip is not installed, we can't repack the jars (path: ${ZIP})"    >&2
+	if ! [ -x "${ZIP_PROGRAM}" ] ; then
+		echo "ERROR: ${PROGNAME}: zip is not installed, we can't repack the jars (path: ${ZIP_PROGRAM})"    >&2
 		return 1
 	fi
-	if ! [ -x "${UNZIP}" ] ; then
-		echo "ERROR: ${PROGNAME}: unzip is not installed, we can't repack the jars (path: ${UNZIP})"    >&2
+	if ! [ -x "${UNZIP_PROGRAM}" ] ; then
+		echo "ERROR: ${PROGNAME}: unzip is not installed, we can't repack the jars (path: ${UNZIP_PROGRAM})"    >&2
 		return 1
 	fi
 
@@ -148,7 +148,7 @@ process_jars_in_dirs()
 
 		cd ${JTMPDIR}
 
-		LC_ALL=C TZ=UTC ${UNZIP} -qq -o ${jabs}
+		LC_ALL=C TZ=UTC ${UNZIP_PROGRAM} -qq -o ${jabs}
 
 		find . -type d -exec chmod u=rwx,g=rx,o=rx {} \;
 		find . -type f -exec chmod u=rw,g=r,o=r {} \;
@@ -178,7 +178,7 @@ process_jars_in_dirs()
 		cd ${JARDIR}
 
 		if [ -n "$( find -not -name '.' )" ]; then
-			find * -not -name '.' | LC_ALL=C sort | LC_ALL=C TZ=UTC ${ZIP} -q -X -9 ${jabs}.tmp.new.zip "-@"
+			find * -not -name '.' | LC_ALL=C sort | LC_ALL=C TZ=UTC ${ZIP_PROGRAM} -q -X -9 ${jabs}.tmp.new.zip "-@"
 		else
 			# Put the empty jar back
 			touch ${jabs}.tmp.new.zip
