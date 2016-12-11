@@ -103,6 +103,12 @@ sub process_file($)
 			next;
 		}
 
+		if ($line =~ /^$IDENT=([a-zA-Z0-9._-]+)$/) {
+			# CONFIG_FOO=some-string_1.2-3.4
+			push(@CFLAGS, "-D$1$2=$3");
+			next;
+		}
+
 		if ($line =~ /^$IDENT=$/) {
 			# CONFIG_FOO=
 			push(@CFLAGS, "-D$1$2=");
