@@ -23,8 +23,12 @@ our $IDENT = qr{($PREFIX)([a-zA-Z0-9_]+)};
 sub help($)
 {
 	my ($exitcode) = @_;
+	my $oh = \*STDERR;
+	if ($exitcode == 0) {
+		$oh = \*STDOUT;
+	}
 
-	print STDERR << "EOM";
+	print $oh <<"EOM";
 Usage: $P [OPTION]... [FILE]...
 Version: $V
 
