@@ -1,7 +1,7 @@
 #!/usr/bin/perl -wT
 # Convert .config to CFLAGS -D flags
 #
-# Evgueni Souleimanov <esoule[at]100500.ca>
+# By Evgueni Souleimanov <esoule[at]100500.ca>
 
 use strict;
 use warnings;
@@ -52,7 +52,7 @@ sub process_file($)
 		open($fh, '<&STDIN');
 	} else {
 		open($fh, '<', "$filename") ||
-			die "$P: $filename: open failed - $!\n";
+			die "ERROR: $P: $filename: open failed - $!\n";
 	}
 
 	while (my $line = <$fh>) {
@@ -116,7 +116,7 @@ sub process_file($)
 		}
 
 		if ($line =~ /^(.+)$/) {
-			warn "WARNING: can't parse line: $filename:$num:$line\n";
+			warn "WARNING: $P: can't parse line: $filename:$num:$line\n";
 			$PARSE_FAILED = 1;
 		}
 	}
@@ -154,7 +154,7 @@ for my $filename (@ARGV) {
 }
 
 if ($PARSE_FAILED) {
-	die "$P: config parsing failed\n";
+	die "ERROR: $P: config parsing failed\n";
 	exit(1);
 }
 
