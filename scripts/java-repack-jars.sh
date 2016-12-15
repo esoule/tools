@@ -96,9 +96,36 @@ parse_args()
 	return 0
 }
 
+resolve_which()
+{
+	local arg="${1:-}"
+	local __prog_which=""
+
+	if [ -z "${arg}" ] ; then
+		return 0
+	fi
+
+	if [ -x "${arg}" ] ; then
+		echo "${arg}"
+		return 0
+	fi
+
+	__prog_which="$( which "${arg}" | head -n 1 )"
+	if [ -x "${__prog_which}" ] ; then
+		echo "${__prog_which}"
+		return 0
+	fi
+
+	echo "${arg}"
+	return 0
+}
+
 process_jars_in_dirs()
 {
 	local __opt_nd=""
+
+	ZIP_PROGRAM="$( resolve_which "${ZIP_PROGRAM}" )"
+	UNZIP_PROGRAM="$( resolve_which "${UNZIP_PROGRAM}" )"
 
 	if ! [ -x "${ZIP_PROGRAM}" ] ; then
 		echo "ERROR: ${PROGNAME}: zip is not installed, we can't repack the jars (path: ${ZIP_PROGRAM})"    >&2
