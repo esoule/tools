@@ -167,7 +167,7 @@ process_jars_in_dirs()
 		local JARDIR="$( mktemp -d ${JTOPTMPDIR}/${JARNAME}.jardir.XXXXXXXXXX )" || exit 1
 		local TIMEREF="$( mktemp ${JTOPTMPDIR}/${JARNAME}.timeref.XXXXXXXXXX )" || exit 1
 
-		touch -c -h -d "@${TIMESTAMP_EPOCH}" "${TIMEREF}"
+		touch -c ${__opt_nd} -d "@${TIMESTAMP_EPOCH}" "${TIMEREF}"
 
 		if [ -z "${jabs}" ] ; then
 			exit 1
@@ -189,17 +189,17 @@ process_jars_in_dirs()
 		# the times.
 		find -type f | LC_ALL=C sort | while read f; do
 			cp "${f}" "${JARDIR}/${f}"
-			touch ${__opt_nd} -c -d "@${TIMESTAMP_EPOCH}" "${JARDIR}/${f}"
+			touch -c ${__opt_nd} -d "@${TIMESTAMP_EPOCH}" "${JARDIR}/${f}"
 			if [ "${DO_CLAMP_TS}" ] ; then
 				if [ "${TIMEREF}" -nt "${f}" ] ; then
-					touch ${__opt_nd} -c -r "${f}" "${JARDIR}/${f}"
+					touch -c ${__opt_nd} -r "${f}" "${JARDIR}/${f}"
 				fi
 			fi
 		done
 		cd "${CURDIR}"
 
 		# Set the times of the directories.
-		find ${JARDIR} -type d -print0 | xargs -0 touch -c -h -d "@${TIMESTAMP_EPOCH}"
+		find ${JARDIR} -type d -print0 | xargs -0 touch -c ${__opt_nd} -d "@${TIMESTAMP_EPOCH}"
 
 		# make the jar
 		cd ${JARDIR}
