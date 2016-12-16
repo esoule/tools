@@ -13,6 +13,7 @@ verbose_s_echo=":"
 TIMESTAMP_EPOCH="1000684800"
 DO_CLAMP_TS=""
 DO_REPACK=""
+CREATED_BY_VER=""
 
 ZIP_PROGRAM=${ZIP_PROGRAM:-/usr/bin/zip}
 UNZIP_PROGRAM=${UNZIP_PROGRAM:-/usr/bin/unzip}
@@ -30,6 +31,7 @@ Arguments:
   -C                         only replace timestamps if they are later
                              than the time specified to -T SECONDS.
   -b                         do the repacking (required)
+  -c STRING                  replace Created-By: header in manifest
   -h                         this help message
   -V                         version
 __EOF__
@@ -59,7 +61,7 @@ parse_args()
 
 	local ret_val=0
 
-	while getopts ":vT:CbhV" OPTION ; do
+	while getopts ":vT:Cbc:hV" OPTION ; do
 		case "${OPTION}" in
 		v)
 			verbose_s_echo="echo"
@@ -75,6 +77,9 @@ parse_args()
 			;;
 		b)
 			DO_REPACK="y"
+			;;
+		c)
+			CREATED_BY_VER="${OPTARG}"
 			;;
 		h)
 			WANT_USAGE="y"
@@ -164,6 +169,7 @@ process_jars_in_dirs()
 		local jabs="$( readlink -m "${j}" )"
 
 		local JTMPDIR="$( mktemp -d ${JTOPTMPDIR}/${JARNAME}.tmpdir.XXXXXXXXXX )" || exit 1
+		local JTMP2DIR="$( mktemp -d ${JTOPTMPDIR}/${JARNAME}.tmpdir2.XXXXXXXXXX )" || exit 1
 		local JARDIR="$( mktemp -d ${JTOPTMPDIR}/${JARNAME}.jardir.XXXXXXXXXX )" || exit 1
 		local TIMEREF="$( mktemp ${JTOPTMPDIR}/${JARNAME}.timeref.XXXXXXXXXX )" || exit 1
 
@@ -196,6 +202,20 @@ process_jars_in_dirs()
 				fi
 			fi
 		done
+
+		# Edit Created-By field if asked
+		local manif_file="${JARDIR}/META-INF/MANIFEST.MF"
+		local manif_orig="${JTMP2DIR}/MANIFEST.MF.orig"
+
+		if [ -r "${manif_file}" ]    \
+				&& [ -n "${CREATED_BY_VER}" ] ; then
+			cp --archive "${manif_file}" "${manif_orig}"
+			sed -e "s|^Created[-]By:.*$|Created-By: ${CREATED_BY_VER}|i;" "${manif_orig}" \
+				>"${manif_file}"
+			touch -c -r "${manif_orig}" "${manif_file}"
+			rm -f "${manif_orig}"
+		fi
+
 		cd "${CURDIR}"
 
 		# Set the times of the directories.
@@ -220,6 +240,7 @@ process_jars_in_dirs()
 
 		# Cleanup.
 		rm -rf ${JTMPDIR}
+		rm -rf ${JTMP2DIR}
 		rm -rf ${JARDIR}
 		rm -f ${TIMEREF}
 
